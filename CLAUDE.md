@@ -91,7 +91,8 @@ User chọn **giống hệt video**: đang kéo file (từ Nautilus) thì bấm 
 
 ## Trạng thái
 
-Đang brainstorm, **chưa có thiết kế được duyệt**. Không viết code sản phẩm, không cài thư viện, không dựng khung dự án cho đến khi user duyệt bản thiết kế.
+**Thiết kế đã được user duyệt ngày 2026-10-20**: `docs/superpowers/specs/2026-10-20-dropwheel-design.md`. Tài liệu đó là nguồn sự thật; mục nào trong file này mâu thuẫn với nó thì theo tài liệu.
+Đang triển khai theo `docs/superpowers/plans/2026-10-20-dropwheel-plan.md`.
 
 ## Quy tắc
 
