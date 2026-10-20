@@ -1,0 +1,18 @@
+#!/bin/sh
+# Launcher: tìm mã nguồn cạnh thư mục bin/, nạp gtk4-layer-shell trước libwayland.
+here=$(dirname "$(readlink -f "$0")")
+src=${DROPWHEEL_SRC:-$here/../src}
+if [ "$1" = "show" ]; then
+  # Đường nhanh cho phím tắt: không nạp GTK.
+  exec python3 -I -S -c 'import os,socket,sys
+s=socket.socket(socket.AF_UNIX)
+try:
+    s.connect(os.path.join(os.environ.get("XDG_RUNTIME_DIR","/tmp"),"dropwheel.sock")); s.sendall(b"show\n")
+except OSError:
+    sys.exit("dropwheel chưa chạy")'
+fi
+export PYTHONPATH="$src${PYTHONPATH:+:$PYTHONPATH}"
+if [ "$1" = "daemon" ]; then
+  export LD_PRELOAD="/usr/lib/libgtk4-layer-shell.so${LD_PRELOAD:+:$LD_PRELOAD}"
+fi
+exec python3 -m dropwheel "$@"
