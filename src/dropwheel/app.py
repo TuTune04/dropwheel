@@ -57,9 +57,12 @@ class App(Gtk.Application):
 
     def do_activate(self):
         self.hold()
-        for rule in (LAYER_RULE, WINDOW_RULE):
-            if not hypr.eval_lua(rule):
-                log.warning("Hyprland không nhận quy tắc: %s", rule)
+        self._apply_rules()
+        try:
+            # Hyprland nạp lại cấu hình thì các quy tắc lúc chạy bị mất: áp lại.
+            hypr.watch_events(lambda name, _d: name == "configreloaded" and self._apply_rules())
+        except OSError:
+            log.warning("không nghe được sự kiện Hyprland")
         self.vaapi = has_vaapi()
         log.info("encoder: %s", "h264_vaapi" if self.vaapi else "libx264")
         self.runner = Runner(lambda ev: GLib.idle_add(self._on_event, ev))
@@ -67,6 +70,12 @@ class App(Gtk.Application):
         self.wheel = Wheel(self, self._on_drop)
         self.server = ipc.Server(self._on_command)
         log.info("dropwheel sẵn sàng")
+
+    @staticmethod
+    def _apply_rules():
+        for rule in (LAYER_RULE, WINDOW_RULE):
+            if not hypr.eval_lua(rule):
+                log.warning("Hyprland không nhận quy tắc: %s", rule)
 
     def _on_event(self, ev):
         self.toast.handle(ev)

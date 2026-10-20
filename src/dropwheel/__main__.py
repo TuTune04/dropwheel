@@ -1,4 +1,4 @@
-"""dropwheel daemon | show | cut <file> | logo <file> | quit"""
+"""dropwheel daemon | show | cut <file> | logo <file> | quit | ping"""
 from __future__ import annotations
 
 import logging
@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-USAGE = "Cách dùng: dropwheel daemon | show | cut <file> | logo <file> | quit"
+USAGE = "Cách dùng: dropwheel daemon | show | cut <file> | logo <file> | quit | ping"
 
 
 def state_dir() -> Path:
@@ -35,7 +35,7 @@ def main(argv: list[str]) -> int:
         return App().run([sys.argv[0]])
 
     from .ipc import send  # không cần GTK cho phía gửi lệnh
-    if cmd in ("show", "quit"):
+    if cmd in ("show", "quit", "ping"):
         msg = cmd
     elif cmd in ("cut", "logo") and len(argv) == 2:
         msg = f"edit-{cmd} {Path(argv[1]).resolve()}"

@@ -54,3 +54,32 @@ def eval_lua(code: str) -> bool:
     except (OSError, subprocess.TimeoutExpired):
         return False
     return r.returncode == 0 and r.stdout.strip() == "ok"
+
+
+def watch_events(on_event) -> None:
+    """Nghe socket sự kiện của Hyprland (.socket2.sock); gọi on_event(tên, dữ liệu) trong vòng lặp GLib."""
+    from gi.repository import GLib
+
+    path = _sock_path().replace(".socket.sock", ".socket2.sock")
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.connect(path)
+    s.setblocking(False)
+    buf = bytearray()
+
+    def readable(*_):
+        try:
+            chunk = s.recv(65536)
+        except BlockingIOError:
+            return True
+        if not chunk:
+            return False
+        buf.extend(chunk)
+        while b"\n" in buf:
+            line, _, rest = bytes(buf).partition(b"\n")
+            buf[:] = rest
+            name, _, data = line.decode(errors="replace").partition(">>")
+            on_event(name, data)
+        return True
+
+    GLib.io_add_watch(s.fileno(), GLib.PRIORITY_DEFAULT, GLib.IO_IN | GLib.IO_HUP, readable)
+    watch_events._sock = s  # giữ tham chiếu
