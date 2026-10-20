@@ -34,6 +34,15 @@ def main(argv: list[str]) -> int:
         from .app import App
         return App().run([sys.argv[0]])
 
+    if cmd == "editor" and len(argv) == 3 and argv[1] in ("cut", "logo"):
+        import gi
+        gi.require_version("Gtk", "4.0")
+        gi.require_version("Gdk", "4.0")
+        gi.require_version("Gtk4LayerShell", "1.0")
+        gi.require_version("PangoCairo", "1.0")
+        from .editor import run_standalone
+        return run_standalone(argv[1], argv[2])
+
     from .ipc import send  # không cần GTK cho phía gửi lệnh
     if cmd in ("show", "quit", "ping"):
         msg = cmd

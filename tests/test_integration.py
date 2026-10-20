@@ -176,6 +176,19 @@ class Base(unittest.TestCase):
             self.assertFalse((self.d / "long - cắt.mp4").exists())
         self.assertEqual(src.stat().st_size, before)
 
+    def test_fallback_when_fast_path_fails(self):
+        src = make_video(self.d / "fb.mov", dur=2)
+        info = probe(src)
+
+        def build():
+            good = C.compress(info, self.vaapi, hw_decode=False)
+            bad = C.Plan(good.title, ["ffmpeg", "-v", "error", "-i", "/khong/ton/tai.mov", str(good.parts[0])],
+                         good.finals, good.parts, good.duration, must_shrink=True, src=src, fallback=good)
+            return bad
+        ev, _ = run_plan(build)
+        self.assertIn(ev.kind, ("done", "skipped"), ev.message)
+        self.assert_no_parts()
+
     def test_not_video(self):
         f = self.d / "note.txt"
         f.write_text("hi")

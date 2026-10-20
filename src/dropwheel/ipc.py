@@ -17,6 +17,7 @@ def send(cmd: str) -> bool:
     try:
         s.connect(sock_path())
         s.sendall(cmd.encode() + b"\n")
+        s.shutdown(socket.SHUT_WR)
         return True
     except OSError:
         return False
@@ -47,12 +48,18 @@ class Server:
         except BlockingIOError:
             return True
         conn.settimeout(0.5)
+        chunks = []
         try:
-            data = conn.recv(1024).decode(errors="replace").strip()
+            while len(chunks) < 64:          # tối đa ~4 MB
+                c = conn.recv(65536)
+                if not c:
+                    break
+                chunks.append(c)
         except OSError:
-            data = ""
+            pass
         finally:
             conn.close()
+        data = b"".join(chunks).decode(errors="replace").strip()
         for line in data.splitlines():
             if line and line != "ping":
                 try:

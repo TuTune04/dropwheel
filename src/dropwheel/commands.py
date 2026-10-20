@@ -16,7 +16,9 @@ SEND_X264_CRF = 23
 SEND_LONG_SIDE = 1280
 SEND_MAX_FPS = 30
 
-HIGH_VAAPI_QP = 20
+HIGH_VAAPI_QUALITY = 24     # QVBR cho MP4/Cắt/Logo: đẹp mà không phình to hơn gốc
+HIGH_VAAPI_MAX_KBPS = 12000
+HW_DECODE_VCODECS = {"h264", "hevc", "vp9", "av1"}   # Iris Xe giải mã được (8-bit 4:2:0)
 HIGH_X264_CRF = 18
 HIGH_AUDIO_KBPS = 192
 
@@ -62,6 +64,7 @@ class Plan:
     duration: float                  # giây, để tính phần trăm
     must_shrink: bool = False        # Nén: bỏ kết quả nếu không nhỏ hơn gốc
     src: Path | None = None
+    fallback: "Plan | None" = None   # chạy lại bằng cách này nếu cách nhanh lỗi (ví dụ GPU không giải mã được)
     notes: list[str] = field(default_factory=list)
 
 
@@ -85,7 +88,8 @@ def _venc(profile: str, vaapi: bool) -> list[str]:
                 "-maxrate", f"{SEND_VIDEO_KBPS}k", "-bufsize", f"{SEND_VIDEO_KBPS * 2}k",
                 "-profile:v", "high"]
     if vaapi:
-        return ["-c:v", "h264_vaapi", "-rc_mode", "CQP", "-qp", str(HIGH_VAAPI_QP)]
+        return ["-c:v", "h264_vaapi", "-rc_mode", "QVBR", "-global_quality", str(HIGH_VAAPI_QUALITY),
+                "-b:v", f"{HIGH_VAAPI_MAX_KBPS * 2 // 3}k", "-maxrate", f"{HIGH_VAAPI_MAX_KBPS}k"]
     return ["-c:v", "libx264", "-preset", "veryfast", "-crf", str(HIGH_X264_CRF),
             "-profile:v", "high"]
 
@@ -143,12 +147,34 @@ def mp4(info: MediaInfo, vaapi: bool) -> Plan:
     return Plan(title, args, [final], [part], info.duration, src=src)
 
 
-def compress(info: MediaInfo, vaapi: bool) -> Plan:
+def send_size(width: int, height: int) -> tuple[int, int]:
+    """Kích thước "Nén để gửi": cạnh dài tối đa 1280, không phóng to, số chẵn."""
+    long_side = max(width, height)
+    k = min(1.0, SEND_LONG_SIDE / long_side) if long_side else 1.0
+    return max(2, round(width * k / 2) * 2), max(2, round(height * k / 2) * 2)
+
+
+def _can_hw_decode(info: MediaInfo) -> bool:
+    return (info.vcodec in HW_DECODE_VCODECS and not info.is_hdr and not info.is_10bit
+            and info.rotation % 360 == 0 and info.pix_fmt in ("yuv420p", "yuvj420p", "nv12"))
+
+
+def compress(info: MediaInfo, vaapi: bool, hw_decode: bool = True) -> Plan:
     src = info.path
     final = naming.output_for(src, "nén")
     part = naming.part_path(final)
-    vf = ",".join(_color(info) + _send_shape(info) + ["setsar=1", EVEN, _upload(vaapi)])
-    args = _head(vaapi) + ["-i", str(src), "-map", "0:v:0", "-map", "0:a:0?", "-vf", vf]
+    fast = vaapi and hw_decode and _can_hw_decode(info)
+    if fast:
+        # Toàn bộ trên GPU: giải mã → thu nhỏ → mã hóa. Nhanh gấp ~2 lần, CPU giảm ~5 lần (đã đo).
+        w, h = send_size(info.width, info.height)
+        chain = ([f"fps={SEND_MAX_FPS}"] if info.fps > SEND_MAX_FPS + 0.5 else []) + \
+                [f"scale_vaapi=w={w}:h={h}:format=nv12"]
+        args = ["ffmpeg", "-hide_banner", "-nostdin", "-v", "error", "-y", "-progress", "pipe:1", "-nostats",
+                "-hwaccel", "vaapi", "-hwaccel_device", VAAPI_DEVICE, "-hwaccel_output_format", "vaapi",
+                "-i", str(src), "-map", "0:v:0", "-map", "0:a:0?", "-vf", ",".join(chain)]
+    else:
+        vf = ",".join(_color(info) + _send_shape(info) + ["setsar=1", EVEN, _upload(vaapi)])
+        args = _head(vaapi) + ["-i", str(src), "-map", "0:v:0", "-map", "0:a:0?", "-vf", vf]
     args += _venc("send", vaapi)
     if info.has_audio:
         if info.acodec == "aac" and info.abitrate is not None and info.abitrate <= SEND_AUDIO_KBPS * 1000 + 2000:
@@ -156,7 +182,10 @@ def compress(info: MediaInfo, vaapi: bool) -> Plan:
         else:
             args += _aenc(SEND_AUDIO_KBPS)
     args += STRIP_META + FASTSTART + [str(part)]
-    return Plan("Đang nén…", args, [final], [part], info.duration, must_shrink=True, src=src)
+    plan = Plan("Đang nén…", args, [final], [part], info.duration, must_shrink=True, src=src)
+    if fast:
+        plan.fallback = compress(info, vaapi, hw_decode=False)
+    return plan
 
 
 def cut(info: MediaInfo, segments: list[Segment], vertical: bool, join: bool, vaapi: bool) -> Plan:

@@ -1,14 +1,17 @@
 """Tiến trình nền: nối vòng tròn, thẻ tiến độ, cửa sổ chỉnh và hàng đợi."""
 from __future__ import annotations
 
+import json
 import logging
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from gi.repository import Gdk, Gio, GLib, Gtk
 
 from . import commands as C
 from . import hypr, ipc
-from .editor import Editor
 from .encoders import has_vaapi
 from .jobs import Job, Runner
 from .probe import ProbeError, probe
@@ -88,6 +91,9 @@ class App(Gtk.Application):
         elif cmd.startswith("edit-cut ") or cmd.startswith("edit-logo "):
             kind, path = cmd.split(" ", 1)
             self._open_editor(Path(path), kind.removeprefix("edit-"))
+        elif cmd.startswith("job "):
+            from .editor import spec_to_job
+            self.runner.submit([spec_to_job(json.loads(cmd[4:]), self.vaapi)])
         elif cmd == "quit":
             self.quit()
 
@@ -110,5 +116,8 @@ class App(Gtk.Application):
         except ProbeError as e:
             self.toast.info(str(e), path.name, error=True)
             return
-        win = Editor(self, info, mode, lambda job: self.runner.submit([job]), self.vaapi)
-        win.present()
+        # Cửa sổ chỉnh chạy trong tiến trình riêng: đóng là trả lại hết RAM của GStreamer.
+        env = dict(os.environ)
+        env.pop("LD_PRELOAD", None)
+        subprocess.Popen([sys.executable, "-m", "dropwheel", "editor", mode, str(info.path)], env=env,
+                         start_new_session=True, stdin=subprocess.DEVNULL)

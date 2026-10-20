@@ -100,6 +100,14 @@ class Wheel:
         self.last = 0.0
         self.timer = 0
         self.tick_id = 0
+        self._warm_up()
+
+    def _warm_up(self):
+        """Vẽ thử một lần ra ảnh trong bộ nhớ để nạp sẵn font/emoji: lần Alt+Q đầu tiên không bị chậm."""
+        import cairo
+        surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, SIZE, SIZE)
+        self.t_open = time.monotonic() - 5
+        self._draw(None, cairo.Context(surf), SIZE, SIZE)
 
     # --- hiện / ẩn ------------------------------------------------------------
     def show(self):

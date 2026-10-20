@@ -28,6 +28,7 @@ class MediaInfo:
     has_audio: bool
     acodec: str | None
     abitrate: int | None  # bit/s, None nếu không rõ
+    rotation: int = 0     # độ xoay hiển thị (metadata)
 
     @property
     def is_10bit(self) -> bool:
@@ -62,7 +63,8 @@ def parse(path: Path, data: dict) -> MediaInfo:
     audio = next((s for s in streams if s.get("codec_type") == "audio"), None)
 
     w, h = int(video.get("width", 0)), int(video.get("height", 0))
-    if abs(_rotation(video)) % 180 == 90:
+    rot = _rotation(video)
+    if abs(rot) % 180 == 90:
         w, h = h, w
 
     fmt = data.get("format", {})
@@ -84,6 +86,7 @@ def parse(path: Path, data: dict) -> MediaInfo:
         has_audio=audio is not None,
         acodec=audio.get("codec_name") if audio else None,
         abitrate=abitrate,
+        rotation=rot,
     )
 
 

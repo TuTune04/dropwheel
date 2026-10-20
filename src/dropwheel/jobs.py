@@ -111,13 +111,23 @@ class Runner:
             self._emit(Event("error", job, index, total, message=str(e)))
             return
         self._emit(Event("start", job, index, total, message=plan.title))
+        while True:
+            rc, cancelled, err = self._exec(plan, job, index, total)
+            if rc != 0 and not cancelled and plan.fallback is not None:
+                log.warning("cách nhanh lỗi, chạy lại bằng cách dự phòng:\n%s", err)
+                self._discard(plan.parts)
+                plan = plan.fallback
+                continue
+            break
+        self._finish(plan, job, index, total, rc, cancelled, err)
+
+    def _exec(self, plan: Plan, job: Job, index: int, total: int) -> tuple[int, bool, str]:
         log.info("chạy: %s", " ".join(plan.args))
 
         stderr_tail: list[str] = []
         with self._lock:
             if self._cancel_current:
-                self._emit(Event("cancelled", job, index, total, message="Đã hủy"))
-                return
+                return -1, True, ""
             self._proc = subprocess.Popen(
                 ["nice", "-n", "10", *plan.args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True, stdin=subprocess.DEVNULL)
@@ -143,13 +153,15 @@ class Runner:
         with self._lock:
             self._proc = None
             cancelled = self._cancel_current
+        return proc.returncode, cancelled, "\n".join(stderr_tail)
 
-        if cancelled or proc.returncode != 0:
+    def _finish(self, plan: Plan, job: Job, index: int, total: int, rc: int, cancelled: bool, err: str):
+        if cancelled or rc != 0:
             self._discard(plan.parts)
             if cancelled:
                 self._emit(Event("cancelled", job, index, total, message="Đã hủy"))
             else:
-                log.error("ffmpeg lỗi %s:\n%s", proc.returncode, "\n".join(stderr_tail))
+                log.error("ffmpeg lỗi %s:\n%s", rc, err)
                 self._emit(Event("error", job, index, total, message="ffmpeg báo lỗi, xem log"))
             return
 

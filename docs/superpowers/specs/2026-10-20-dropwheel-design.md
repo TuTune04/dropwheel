@@ -164,6 +164,21 @@ File kết quả có thể kéo tiếp vào vòng tròn để xử lý thêm, gi
 - Nén reel 30 giây 1080p trên VAAPI: mục tiêu **vài giây**. Cần đo thật và ghi lại.
 - Khi rảnh, tiến trình nền gần như không tốn CPU.
 
+### Đo thực tế (2026-10-20, Iris Xe, video tự sinh 1080p30 có nhiễu)
+
+| Hạng mục | Kết quả |
+|---|---|
+| Tiến trình nền khi rảnh | ~67 MB RSS (PSS ~42 MB), 7 luồng, CPU 0% |
+| Sau khi đã hiện vòng tròn | ~100 MB RSS (PSS ~70 MB) |
+| Cửa sổ Cắt/Crop (tiến trình riêng, chỉ khi mở) | ~225 MB RSS; thoát là trả lại hết |
+| Bấm phím → vòng tròn hiện | ~35 ms lần đầu, ~1,5 ms các lần sau |
+| Nén 3 phút (VAAPI, giải mã + thu nhỏ trên GPU) | 14 s, CPU ~120%, ffmpeg ~120 MB |
+| Nén 3 phút (x264, máy không có VAAPI) | 48 s, CPU ~710%, ffmpeg ~350 MB |
+| Crop 9:16 3 đoạn × 30 s nối lại (VAAPI) | 16 s |
+| MP4 chỉ đổi vỏ, 3 phút | 0,4 s |
+
+Giải mã trên GPU chỉ dùng cho Nén. Với Crop/Logo, cách này chậm hơn (đã đo) vì phải chuyển khung hình qua lại giữa GPU và CPU.
+
 ## 13. Rủi ro đã biết, cần kiểm tra sớm
 
 1. **Alt+Q khi đang kéo:** spike mới thử F8 và Shift. Phải kiểm tra rằng Alt+Q cũng chạy khi Nautilus đang kéo file, và giữ phím Super không làm hủy thao tác kéo. Nếu không chạy được thì **báo user**, không tự đổi phím.

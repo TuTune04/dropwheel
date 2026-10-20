@@ -43,14 +43,14 @@ class Seg:
 
 
 class Editor(Gtk.Window):
-    """mode = "cut" | "logo". `submit` nhận Job đã dựng sẵn."""
+    """mode = "cut" | "logo". `submit` nhận spec (dict JSON) của việc cần làm; xem `spec_to_job`."""
 
     def __init__(self, app: Gtk.Application, info: MediaInfo, mode: str,
-                 submit: Callable[[Job], None], vaapi: bool):
+                 submit: Callable[[dict], None]):
         super().__init__(application=app, title=("Cắt / Crop" if mode == "cut" else "Xóa logo")
                          + f" — {info.path.name}")
         self.add_css_class("dw-editor")
-        self.info, self.mode, self.submit, self.vaapi = info, mode, submit, vaapi
+        self.info, self.mode, self.submit = info, mode, submit
         self.W, self.H, self.dur = info.width, info.height, max(info.duration, 0.1)
         self.segs: list[Seg] = []
         self.sel = 0
@@ -550,14 +550,65 @@ class Editor(Gtk.Window):
 
     # --- xuất ------------------------------------------------------------------------
     def _export(self):
-        info, vaapi = self.info, self.vaapi
+        path = str(self.info.path)
         if self.mode == "cut":
             vertical = self.sw_916.get_active()
-            join = self.sw_join.get_active()
-            segs = [C.Segment(s.start, s.end, self._crop_rect(s) if vertical else None) for s in self.segs]
-            job = Job("Đang chuẩn bị…", lambda: C.cut(info, segs, vertical, join, vaapi), info.path.name)
+            segs = []
+            for s in self.segs:
+                r = self._crop_rect(s) if vertical else None
+                segs.append([s.start, s.end] + ([r.x, r.y, r.w, r.h] if r else []))
+            spec = {"op": "cut", "path": path, "vertical": vertical,
+                    "join": self.sw_join.get_active(), "segments": segs}
         else:
-            rects = list(self.rects)
-            job = Job("Đang chuẩn bị…", lambda: C.logo(info, rects, vaapi), info.path.name)
-        self.submit(job)
+            spec = {"op": "logo", "path": path, "rects": [[r.x, r.y, r.w, r.h] for r in self.rects]}
+        self.submit(spec)
         self.close()
+
+
+def spec_to_job(spec: dict, vaapi: bool) -> Job:
+    """Dựng Job từ spec do cửa sổ chỉnh gửi về (qua IPC)."""
+    from .probe import probe
+
+    path = Path(spec["path"])
+    if spec["op"] == "cut":
+        segs = [C.Segment(a[0], a[1], C.Rect(*a[2:6]) if len(a) == 6 else None) for a in spec["segments"]]
+        vertical, join = bool(spec["vertical"]), bool(spec["join"])
+        build = lambda: C.cut(probe(path), segs, vertical, join, vaapi)  # noqa: E731
+    elif spec["op"] == "logo":
+        rects = [C.Rect(*r) for r in spec["rects"]]
+        build = lambda: C.logo(probe(path), rects, vaapi)  # noqa: E731
+    else:
+        raise ValueError(f"spec lạ: {spec.get('op')}")
+    return Job("Đang chuẩn bị…", build, path.name)
+
+
+def run_standalone(mode: str, path: str) -> int:
+    """Tiến trình riêng cho cửa sổ chỉnh: thoát là trả lại toàn bộ RAM (GStreamer ~150 MB)."""
+    import json
+
+    from gi.repository import Gio
+
+    from . import ipc
+    from .app import CSS
+    from .probe import ProbeError, probe
+
+    try:
+        info = probe(path)
+    except ProbeError as e:
+        print(e)
+        return 1
+    app = Gtk.Application(application_id="dev.dropwheel", flags=Gio.ApplicationFlags.NON_UNIQUE)
+
+    def submit(spec):
+        if not ipc.send("job " + json.dumps(spec, ensure_ascii=False)):
+            print("dropwheel chưa chạy, không gửi được việc")
+
+    def activate(a):
+        css = Gtk.CssProvider()
+        css.load_from_string(CSS)
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css,
+                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        Editor(a, info, mode, submit).present()
+
+    app.connect("activate", activate)
+    return app.run([])

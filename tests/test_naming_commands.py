@@ -83,6 +83,23 @@ class Commands(unittest.TestCase):
         self.assertIn("copy", C.compress(info(abitrate=96000), vaapi=False).args)
         self.assertNotIn("copy", C.compress(info(abitrate=320000), vaapi=False).args)
 
+    def test_send_size(self):
+        self.assertEqual(C.send_size(1920, 1080), (1280, 720))
+        self.assertEqual(C.send_size(1080, 1920), (720, 1280))
+        self.assertEqual(C.send_size(640, 360), (640, 360))   # không phóng to
+
+    def test_compress_gpu_decode_only_when_safe(self):
+        fast = C.compress(info(), vaapi=True)
+        self.assertIn("-hwaccel", fast.args)
+        self.assertIn("scale_vaapi=w=1280:h=720:format=nv12", fast.args)
+        self.assertIsNotNone(fast.fallback)
+        self.assertNotIn("-hwaccel", fast.fallback.args)
+        for kw in (dict(rotation=90), dict(is_hdr=True), dict(pix_fmt="yuv420p10le"), dict(vcodec="mpeg4")):
+            p = C.compress(info(**kw), vaapi=True)
+            self.assertNotIn("-hwaccel", p.args, kw)
+            self.assertIsNone(p.fallback)
+        self.assertNotIn("-hwaccel", C.compress(info(), vaapi=False).args)
+
     def test_hdr_gets_tonemap(self):
         self.assertIn("tonemap", " ".join(C.compress(info(is_hdr=True), vaapi=False).args))
 
