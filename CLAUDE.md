@@ -69,7 +69,7 @@ User chọn cách **A: cắt khung 9:16** (kéo khung chọn phần giữ lại,
 ## Cách gọi vòng tròn
 
 User chọn **giống hệt video**: đang kéo file (từ Nautilus) thì bấm phím, vòng tròn hiện quanh con trỏ, thả file vào ô.
-**Phím gọi (user chọn): `SUPER + Q`.** Đã kiểm tra là chưa bị chiếm (2026-10-20). Không dùng Shift vì sẽ đụng việc gõ chữ hoa.
+**Phím gọi (user chọn): `ALT + Q`** (2026-10-20; ban đầu chọn Super+Q, sau khi thử thì user đổi sang Alt+Q). Đã kiểm tra là chưa bị chiếm. Không dùng Shift vì sẽ đụng việc gõ chữ hoa.
 
 ### Giao diện vòng tròn (user chọn)
 

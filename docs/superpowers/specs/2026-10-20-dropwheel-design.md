@@ -10,7 +10,7 @@ Quy ước: những gì không ghi chú là do **user quyết định** trong bu
 
 **dropwheel** là công cụ chạy ngầm trên máy Linux của user. Nó thay thế việc lên trang web để đổi định dạng, nén hay cắt video (tải lên, chờ, tải về).
 
-Cách dùng: đang **kéo một file video trong Nautilus** thì bấm **Super+Q**. Một **vòng tròn có 4 ô** bung ra quanh con trỏ. **Thả file vào ô nào thì việc đó được làm ngay trên máy**, file kết quả nằm cạnh file gốc.
+Cách dùng: đang **kéo một file video trong Nautilus** thì bấm **Alt+Q**. Một **vòng tròn có 4 ô** bung ra quanh con trỏ. **Thả file vào ô nào thì việc đó được làm ngay trên máy**, file kết quả nằm cạnh file gốc.
 
 Ý tưởng lấy từ một video demo ứng dụng macOS: kéo file, giữ phím, menu tròn hiện ra, thả vào ô.
 
@@ -22,7 +22,7 @@ Cách dùng: đang **kéo một file video trong Nautilus** thì bấm **Super+Q
 
 ## 2. Mục tiêu
 
-1. Kéo file, bấm Super+Q, thả vào ô. Không phải mở ứng dụng nào.
+1. Kéo file, bấm Alt+Q, thả vào ô. Không phải mở ứng dụng nào.
 2. **Nhanh** (ưu tiên của user): những việc đơn giản xong trong vài giây. File hơi to cũng chấp nhận được. Không mã hóa lại khi không cần.
 3. 4 thao tác: **MP4 · Nén · Cắt/Crop · Logo**.
 4. Vòng tròn đẹp, gọn và **có chuyển động** (bắt buộc).
@@ -46,7 +46,7 @@ Cách dùng: đang **kéo một file video trong Nautilus** thì bấm **Super+Q
 
 ## 5. Ràng buộc môi trường (đã kiểm tra trên máy)
 
-- Omarchy (Arch Linux), **Hyprland 0.56** (Wayland). Cấu hình Hyprland viết bằng **Lua** (`~/.config/hypr/*.lua`); phím tắt khai báo bằng `hl.bind` (hoặc helper `o.bind` của Omarchy). `F9` đã bị voxtype dùng; **Super+Q còn trống**.
+- Omarchy (Arch Linux), **Hyprland 0.56** (Wayland). Cấu hình Hyprland viết bằng **Lua** (`~/.config/hypr/*.lua`); phím tắt khai báo bằng `hl.bind` (hoặc helper `o.bind` của Omarchy). `F9` đã bị voxtype dùng; **Alt+Q còn trống**.
 - File manager: **Nautilus**.
 - Phần cứng: Intel Tiger Lake, **Iris Xe (Quick Sync)**, 8 luồng CPU, `/dev/dri/renderD128`. Chưa kiểm tra driver VAAPI.
 - Đã cài sẵn: `ffmpeg` (có `h264_vaapi`, `hevc_vaapi`, `h264_qsv`, `libx264`, `libx265`), Python 3.14, GTK 4.22, `gtk4-layer-shell` 1.3, PyGObject 3.56, GStreamer 1.28 (good/bad/libav).
@@ -54,15 +54,15 @@ Cách dùng: đang **kéo một file video trong Nautilus** thì bấm **Super+Q
 ## 6. Kiến trúc *(Claude chọn, dựa trên spike đã chạy được)*
 
 - **Ngôn ngữ/giao diện:** Python + GTK4 + `gtk4-layer-shell`. Bản spike đã chứng minh tổ hợp này chạy được. Phải nạp `LD_PRELOAD=/usr/lib/libgtk4-layer-shell.so`, nếu không thì cửa sổ không thành layer surface.
-- **Tiến trình nền `dropwheel`** chạy suốt phiên làm việc, giữ sẵn cửa sổ vòng tròn (ẩn) để hiện ra tức thì. Lệnh `dropwheel show` (được gán cho Super+Q) báo cho tiến trình nền qua một Unix socket trong `$XDG_RUNTIME_DIR`.
+- **Tiến trình nền `dropwheel`** chạy suốt phiên làm việc, giữ sẵn cửa sổ vòng tròn (ẩn) để hiện ra tức thì. Lệnh `dropwheel show` (được gán cho Alt+Q) báo cho tiến trình nền qua một Unix socket trong `$XDG_RUNTIME_DIR`.
 - **Vị trí con trỏ và màn hình** lấy qua socket IPC của Hyprland, không gọi `hyprctl` qua subprocess. Spike gọi qua subprocess mất ~125 ms. **Mục tiêu: từ lúc bấm phím đến khi vòng tròn hiện dưới 50 ms.**
 - **Xử lý video:** gọi `ffmpeg`/`ffprobe` qua subprocess; tiến độ đọc từ `-progress`. Các việc chạy **lần lượt từng việc một** với mức ưu tiên thấp (`nice`) để không làm máy đơ.
 - **Xem trước video trong cửa sổ Cắt/Crop/Logo:** GStreamer (`Gtk.Video`/`GtkMediaFile`) hoặc ảnh khung hình do ffmpeg xuất ra *(để người làm quyết)*. Yêu cầu: kéo thanh thời gian thì xem được khung hình gần như ngay.
-- **Cài đặt:** một script cài vào `~/.local` (code và lệnh `dropwheel`). Script này có thêm phím Super+Q vào `~/.config/hypr/bindings.lua` và thêm lệnh tự khởi động vào `~/.config/hypr/autostart.lua`. **Trước khi sửa file cấu hình, script phải in đúng những dòng sẽ thêm và hỏi user.** Không được ghi đè hay xóa dòng có sẵn. Gỡ cài đặt cũng hỏi như vậy.
+- **Cài đặt:** một script cài vào `~/.local` (code và lệnh `dropwheel`). Script này có thêm phím Alt+Q vào `~/.config/hypr/bindings.lua` và thêm lệnh tự khởi động vào `~/.config/hypr/autostart.lua`. **Trước khi sửa file cấu hình, script phải in đúng những dòng sẽ thêm và hỏi user.** Không được ghi đè hay xóa dòng có sẵn. Gỡ cài đặt cũng hỏi như vậy.
 
 ## 7. Vòng tròn
 
-**Gọi ra:** Super+Q, vòng tròn hiện **lấy con trỏ làm tâm**, trên màn hình đang chứa con trỏ, ở lớp overlay, không lấy focus bàn phím. Spike đã xác nhận phím tắt vẫn chạy khi Nautilus đang kéo file và vòng tròn hiện giữa chừng vẫn nhận được file thả vào. (Spike dùng F8. **Super+Q cần được kiểm tra lại ngay từ đầu**, xem §13.)
+**Gọi ra:** Alt+Q, vòng tròn hiện **lấy con trỏ làm tâm**, trên màn hình đang chứa con trỏ, ở lớp overlay, không lấy focus bàn phím. Spike đã xác nhận phím tắt vẫn chạy khi Nautilus đang kéo file và vòng tròn hiện giữa chừng vẫn nhận được file thả vào. (Spike dùng F8. **Alt+Q cần được kiểm tra lại ngay từ đầu**, xem §13.)
 
 **Hình dáng (kiểu A, user chọn):** vành khuyên kính mờ, 4 múi liền nhau theo thứ tự trên → phải → dưới → trái: **MP4 · Nén · Cắt/Crop · Logo**.
 - Mỗi múi gồm biểu tượng và chữ. Múi đang được rê vào chuyển màu cam (#f05a28).
@@ -166,7 +166,7 @@ File kết quả có thể kéo tiếp vào vòng tròn để xử lý thêm, gi
 
 ## 13. Rủi ro đã biết, cần kiểm tra sớm
 
-1. **Super+Q khi đang kéo:** spike mới thử F8 và Shift. Phải kiểm tra rằng Super+Q cũng chạy khi Nautilus đang kéo file, và giữ phím Super không làm hủy thao tác kéo. Nếu không chạy được thì **báo user**, không tự đổi phím.
+1. **Alt+Q khi đang kéo:** spike mới thử F8 và Shift. Phải kiểm tra rằng Alt+Q cũng chạy khi Nautilus đang kéo file, và giữ phím Super không làm hủy thao tác kéo. Nếu không chạy được thì **báo user**, không tự đổi phím.
 2. **Driver VAAPI** (`intel-media-driver`) có thể chưa cài. Nếu thiếu: thứ nhất, cách lùi về `libx264` vẫn phải chạy được; thứ hai, **hỏi user trước khi cài gói**.
 3. Chất lượng của `delogo` có thể không đạt kỳ vọng. Chấp nhận được trong bản đầu.
 

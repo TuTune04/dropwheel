@@ -1,4 +1,4 @@
-"""Vòng tròn kiểu A (thiết kế §7): vành khuyên kính mờ, 4 múi, tâm hiện tên thao tác, có chuyển động."""
+"""Vòng tròn kiểu A (thiết kế §7): một vành liền mạch 4 ô, tâm hiện tên thao tác, có chuyển động."""
 from __future__ import annotations
 
 import math
@@ -13,16 +13,16 @@ from gi.repository import Gtk4LayerShell as LS
 from . import hypr
 
 NAMESPACE = "dropwheel"
-SIZE = 270
-R_OUT, R_IN, R_HUB = 110, 46, 40
-GAP_DEG = 2.2
+SIZE = 290
+R_OUT, R_IN, R_HUB = 110, 46, 44
+BULGE_OUT, BULGE_IN = 9, 3            # ô được rê vào phồng ra (px)
 
 CREAM = (1.0, 0.973, 0.941, 0.93)
 ORANGE = (0.941, 0.353, 0.157, 0.97)
 INK = (0.23, 0.165, 0.133)
 
 STAGGER, POP = 0.045, 0.32          # giây
-AUTO_HIDE_MS, LEAVE_HIDE_MS = 3000, 1000
+AUTO_HIDE_MS, LEAVE_HIDE_MS = 2000, 1000   # user: không có file thì chỉ hiện 2 giây
 
 
 @dataclass(frozen=True)
@@ -30,10 +30,13 @@ class Slot:
     key: str
     label: str
     icon: str
+    hint: str
 
 
-SLOTS = (Slot("mp4", "MP4", "🎞"), Slot("compress", "Nén", "🗜"),
-         Slot("cut", "Cắt/Crop", "✂"), Slot("logo", "Logo", "🧽"))
+SLOTS = (Slot("mp4", "MP4", "🎞", "Đổi sang MP4"),
+         Slot("compress", "Nén", "🗜", "Nhẹ để gửi Zalo"),
+         Slot("cut", "Cắt/Crop", "✂", "Mở cửa sổ cắt"),
+         Slot("logo", "Logo", "🧽", "Xóa watermark"))
 
 
 def ease_out_back(t: float, s: float = 1.9) -> float:
@@ -44,6 +47,11 @@ def ease_out_back(t: float, s: float = 1.9) -> float:
 def ease_in_back(t: float, s: float = 1.7) -> float:
     t = min(max(t, 0.0), 1.0)
     return t * t * ((s + 1) * t - s)
+
+
+def ease_out_cubic(t: float) -> float:
+    t = min(max(t, 0.0), 1.0)
+    return 1 - (1 - t) ** 3
 
 
 def lerp(a, b, t):
@@ -238,73 +246,107 @@ class Wheel:
     def _draw(self, _a, cr, w, h):
         now = time.monotonic()
         cx, cy = w / 2, h / 2
+        t = now - self.t_open
         if self.t_close is not None:
-            c = (now - self.t_close) / self._close_len
-            close_scale = 1 - 0.7 * ease_in_back(c) if self.t_drop else 1 - 0.1 * c
-            close_alpha = max(0.0, 1 - c)
+            c = min(1.0, (now - self.t_close) / self._close_len)
+            close_scale = 1 - 0.75 * ease_in_back(c) if self.t_drop else 1 - 0.08 * c
+            close_alpha = max(0.0, 1 - c) if not self.t_drop else max(0.0, 1 - c * c)
         else:
             close_scale, close_alpha = 1.0, 1.0
 
-        for i, slot in enumerate(SLOTS):
-            p_lin = min(max((now - self.t_open - i * STAGGER) / POP, 0.0), 1.0)
-            if p_lin <= 0:
-                continue
-            p = ease_out_back(p_lin)
-            hot = self.hot[i]
-            scale = (0.4 + 0.6 * p) * (1 + 0.07 * hot) * close_scale
-            alpha = min(1.0, p_lin * 1.6) * close_alpha
-            rot = math.radians(-40 * (1 - p))
-            mid = math.radians(-90 + i * 90)
-            a0 = mid - math.radians(45 - GAP_DEG)
-            a1 = mid + math.radians(45 - GAP_DEG)
+        grow = 0.6 + 0.4 * ease_out_back(t / 0.34, 1.6)
+        sweep = 2 * math.pi * ease_out_cubic(t / 0.3)   # vành quét một vòng từ đỉnh
+        top = -math.pi / 2
 
-            cr.save()
-            cr.translate(cx, cy)
-            cr.rotate(rot)
-            cr.scale(scale, scale)
-            # bóng đổ nhẹ
-            cr.save()
-            cr.translate(0, 3)
-            self._sector(cr, a0, a1)
-            cr.set_source_rgba(0.25, 0.08, 0.03, 0.16 * alpha)
+        cr.save()
+        cr.translate(cx, cy)
+        cr.scale(grow * close_scale, grow * close_scale)
+        if sweep < 2 * math.pi - 1e-3:
+            cr.move_to(0, 0)
+            cr.arc(0, 0, R_OUT + BULGE_OUT + 20, top, top + sweep)
+            cr.close_path()
+            cr.clip()
+
+        # bóng mềm dưới cả vành
+        for k, a in ((7, 0.06), (4, 0.09), (2, 0.1)):
+            self._annulus(cr, R_IN - 1, R_OUT + k * 0.6, dy=k)
+            cr.set_source_rgba(0.25, 0.08, 0.03, a * close_alpha)
             cr.fill()
-            cr.restore()
-            self._sector(cr, a0, a1)
-            r_, g_, b_, a_ = lerp(CREAM, ORANGE, hot)
-            cr.set_source_rgba(r_, g_, b_, a_ * alpha)
-            cr.fill_preserve()
-            cr.set_source_rgba(1, 1, 1, 0.55 * alpha * (1 - hot))
-            cr.set_line_width(1)
+
+        # nền vành liền một khối
+        self._annulus(cr, R_IN, R_OUT)
+        cr.set_source_rgba(*CREAM[:3], CREAM[3] * close_alpha)
+        cr.fill()
+
+        # ô đang rê vào: phồng ra, liền với vành
+        for i in range(len(SLOTS)):
+            hot = self.hot[i]
+            if hot < 0.01:
+                continue
+            mid = top + i * math.pi / 2
+            ro, ri = R_OUT + BULGE_OUT * hot, R_IN - BULGE_IN * hot
+            self._sector(cr, mid - math.pi / 4, mid + math.pi / 4, ri, ro)
+            cr.set_source_rgba(*ORANGE[:3], ORANGE[3] * hot * close_alpha)
+            cr.fill()
+
+        # vạch chia mảnh, mờ đi khi ô bên cạnh đang sáng
+        cr.set_line_width(1.2)
+        for i in range(len(SLOTS)):
+            a = top + math.pi / 4 + i * math.pi / 2
+            fade = 1 - max(self.hot[i], self.hot[(i + 1) % len(SLOTS)])
+            cr.set_source_rgba(*INK, 0.13 * fade * close_alpha)
+            cr.move_to((R_IN + 8) * math.cos(a), (R_IN + 8) * math.sin(a))
+            cr.line_to((R_OUT - 8) * math.cos(a), (R_OUT - 8) * math.sin(a))
             cr.stroke()
-            # biểu tượng + chữ
-            rr = (R_IN + R_OUT) / 2 + 2
+
+        # viền sáng kiểu kính
+        cr.set_line_width(1)
+        cr.arc(0, 0, R_OUT - 0.5, 0, 2 * math.pi)
+        cr.set_source_rgba(1, 1, 1, 0.7 * close_alpha)
+        cr.stroke()
+        cr.arc(0, 0, R_IN + 0.5, 0, 2 * math.pi)
+        cr.set_source_rgba(*INK, 0.08 * close_alpha)
+        cr.stroke()
+
+        # biểu tượng + chữ: hiện so le, trượt nhẹ ra ngoài
+        for i, slot in enumerate(SLOTS):
+            p = ease_out_cubic((t - 0.1 - i * STAGGER) / 0.2)
+            if p <= 0:
+                continue
+            hot = self.hot[i]
+            mid = top + i * math.pi / 2
+            rr = (R_IN + R_OUT) / 2 + 2 - 6 * (1 - p) + 3 * hot
             tx, ty = rr * math.cos(mid), rr * math.sin(mid)
             ink = lerp(INK, (1, 1, 1), hot)
-            self._text(cr, slot.icon, tx, ty - 9, 17, (*ink, alpha), bold=False)
+            alpha = p * close_alpha
+            self._text(cr, slot.icon, tx, ty - 9, 17 + 2 * hot, (*ink, alpha))
             self._text(cr, slot.label, tx, ty + 11, 10.5, (*ink, alpha), bold=True)
-            cr.restore()
+        cr.restore()
 
         # tâm
-        hub_p = ease_out_back(min(max((now - self.t_open) / 0.3, 0), 1))
         if self.t_drop is None:
+            hub = ease_out_back(t / 0.3, 1.8) * close_scale
             cr.save()
             cr.translate(cx, cy)
-            cr.scale(hub_p * close_scale, hub_p * close_scale)
+            cr.scale(max(hub, 0.01), max(hub, 0.01))
             cr.arc(0, 0, R_HUB, 0, 2 * math.pi)
-            cr.set_source_rgba(1, 1, 1, 0.9 * close_alpha)
+            cr.set_source_rgba(1, 1, 1, 0.94 * close_alpha)
             cr.fill()
-            la = min(1.0, (now - self.t_label) / 0.12) * close_alpha
-            col = ORANGE[:3] if self.hover is not None else INK
-            self._text(cr, self.label, 0, 0, 11 if self.hover is not None else 9.5,
-                       (*col, la), bold=True, width=R_HUB * 1.8)
+            la = ease_out_cubic((now - self.t_label) / 0.14) * close_alpha
+            if self.hover is None:
+                self._text(cr, self.label, 0, 0, 9.5, (*INK, la * 0.8), bold=True, width=R_HUB * 1.7)
+            else:
+                slot = SLOTS[self.hover]
+                self._text(cr, slot.label, 0, -6, 11.5, (*ORANGE[:3], la), bold=True, width=R_HUB * 1.8)
+                self._text(cr, slot.hint, 0, 10, 7.5, (*INK, la * 0.75), width=R_HUB * 1.8)
             cr.restore()
         else:
-            t = now - self.t_drop
-            s = ease_out_back(t / 0.3, 2.4) * (1 - 0.1 * max(0, t - 0.3))
-            a = 1.0 if t < 0.45 else max(0.0, 1 - (t - 0.45) / 0.25)
+            td = now - self.t_drop
+            sc = ease_out_back(td / 0.3, 2.4) * (1 - 0.1 * max(0, td - 0.3))
+            a = 1.0 if td < 0.45 else max(0.0, 1 - (td - 0.45) / 0.25)
             cr.save()
             cr.translate(cx, cy)
-            cr.scale(max(s, 0.01), max(s, 0.01))
+            cr.scale(max(sc, 0.01), max(sc, 0.01))
             cr.arc(0, 0, 32, 0, 2 * math.pi)
             cr.set_source_rgba(0.086, 0.639, 0.29, a)
             cr.fill()
@@ -319,10 +361,18 @@ class Wheel:
             cr.restore()
 
     @staticmethod
-    def _sector(cr, a0, a1):
+    def _annulus(cr, ri, ro, dy=0.0):
         cr.new_path()
-        cr.arc(0, 0, R_OUT, a0, a1)
-        cr.arc_negative(0, 0, R_IN, a1, a0)
+        cr.arc(0, dy, ro, 0, 2 * math.pi)
+        cr.new_sub_path()
+        cr.arc_negative(0, dy, ri, 2 * math.pi, 0)
+        cr.close_path()
+
+    @staticmethod
+    def _sector(cr, a0, a1, ri, ro):
+        cr.new_path()
+        cr.arc(0, 0, ro, a0, a1)
+        cr.arc_negative(0, 0, ri, a1, a0)
         cr.close_path()
 
     @staticmethod
